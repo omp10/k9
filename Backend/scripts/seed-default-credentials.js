@@ -8,10 +8,23 @@ import { FoodDeliveryPartner } from "../src/modules/food/delivery/models/deliver
 
 dotenv.config();
 
+// Seed credentials come from the environment so no real password lives in the repo.
+// Set SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD in .env before running this script.
+const SEED_ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL || "admin@k9rides.local";
+const SEED_ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || "";
+
+if (!SEED_ADMIN_PASSWORD) {
+  console.error(
+    "Refusing to seed: SEED_ADMIN_PASSWORD is not set.\n" +
+    "Add SEED_ADMIN_PASSWORD=<a strong password> to Backend/.env and re-run."
+  );
+  process.exit(1);
+}
+
 const DEFAULTS = {
   admin: {
-    email: "K9 Ridesindia@gmail.com",
-    password: "sahin.K9 Rides@2004#",
+    email: SEED_ADMIN_EMAIL,
+    password: SEED_ADMIN_PASSWORD,
     name: "K9 Rides Admin",
     servicesAccess: ["food", "quickCommerce", "taxi"],
   },
