@@ -17,6 +17,35 @@ import {
   notifyOwnersSafely,
 } from './order.helpers.js';
 
+/**
+ * Driver unification: keep only partners whose linked unified Driver is free (no cross-service
+ * busy-lock) and whose work mode accepts deliveries. Partners not yet migrated (no driverId)
+ * are kept, so the legacy flow keeps working during the dual-run phase.
+ * No-op — and no extra query — while UNIFIED_DISPATCH_ENABLED is off.
+ */
+async function filterByUnifiedWorkMode(partners) {
+  if (!config.unifiedDispatchEnabled || !partners?.length) return partners || [];
+  const ids = partners.map((p) => p._id);
+  const rows = await FoodDeliveryPartner.find({ _id: { $in: ids } }).select('_id driverId').lean();
+  const driverIdByPartner = new Map(rows.filter((r) => r.driverId).map((r) => [String(r._id), r.driverId]));
+  if (driverIdByPartner.size === 0) return partners;
+
+  const { Driver } = await import('../../../taxi/driver/models/Driver.js');
+  const freeDrivers = await Driver.find({
+    _id: { $in: [...driverIdByPartner.values()] },
+    activeAssignment: null,
+    workMode: { $in: ['all', 'delivery'] },
+    serviceCapabilities: 'delivery',
+  }).select('_id').lean();
+  const freeIds = new Set(freeDrivers.map((d) => String(d._id)));
+
+  return partners.filter((p) => {
+    const linked = driverIdByPartner.get(String(p._id));
+    if (!linked) return true;           // not migrated yet — don't block
+    return freeIds.has(String(linked)); // migrated — must be free + accepting deliveries
+  });
+}
+
 async function listNearbyOnlineDeliveryPartners(
   restaurantId,
   { maxKm = 15, limit = 25 } = {},
@@ -48,11 +77,15 @@ async function listNearbyOnlineDeliveryPartners(
     .select("_id status lastLat lastLng lastLocationAt name")
     .lean();
 
+  // Driver unification: drop partners whose unified driver is busy on another job or whose
+  // work-mode excludes deliveries. Flag-gated; no-op (and no extra query) while disabled.
+  const eligible = await filterByUnifiedWorkMode(allOnline);
+
   const scored = [];
   const allowedStatuses = process.env.NODE_ENV === 'production' ? ['approved'] : ['approved', 'pending'];
   const STALE_GPS_MS = 10 * 60 * 1000;
 
-  for (const p of allOnline) {
+  for (const p of eligible) {
     if (!allowedStatuses.includes(p.status)) continue;
 
     const isStale = !p.lastLocationAt || (Date.now() - new Date(p.lastLocationAt).getTime()) > STALE_GPS_MS;

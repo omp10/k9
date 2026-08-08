@@ -1,4 +1,5 @@
 import { ApiError } from '../../../utils/ApiError.js';
+import { config } from '../../../config/env.js';
 import { normalizePoint } from '../../../utils/geo.js';
 import { DISPATCH_TOP_DRIVERS } from '../constants/index.js';
 import { Vehicle } from '../admin/models/Vehicle.js';
@@ -88,6 +89,18 @@ export const buildDriverMatchFilters = ({ zoneId, vehicleTypeId, vehicleTypeIds,
     ];
   } else {
     baseFilters.isOnRide = false;
+  }
+
+  // Driver unification: honor the work-mode toggle and the cross-service busy-lock, so a driver
+  // set to "deliveries only" — or already out on a food order — is never offered a ride.
+  // Flag-gated; legacy behavior is untouched while UNIFIED_DISPATCH_ENABLED is off.
+  if (config.unifiedDispatchEnabled) {
+    baseFilters.workMode = { $in: ['all', 'taxi'] };
+    baseFilters.serviceCapabilities = 'taxi';
+    if (transportType !== 'pooling') {
+      // Pool drivers legitimately hold a group; the lock isn't used for pooled rides.
+      baseFilters.activeAssignment = null;
+    }
   }
 
   const andClauses = [];
