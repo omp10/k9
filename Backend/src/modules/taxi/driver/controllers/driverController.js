@@ -30,6 +30,7 @@ import {
   signAccessToken,
 } from "../services/authService.js";
 import { cancelScheduledRideByDriver, cancelActiveRideByDriver, emitToDriver } from "../../services/dispatchService.js";
+import { reconcileDriverAssignment } from "../services/driverAssignmentService.js";
 import { notifyLateAvailableDriver } from "../../services/dispatchService.js";
 import { findZoneByPickup } from "../services/locationService.js";
 import { listDriverServiceLocations } from "../services/serviceLocationService.js";
@@ -2301,6 +2302,9 @@ export const goOnline = async (req, res) => {
 
   await ensureDriverWalletCanAcceptRide(existingDriver);
   await clearDriverActiveRideIfStale(existingDriver);
+  // Self-heal a cross-service busy-lock left behind by an abandoned/force-quit job, otherwise
+  // the driver would come back online permanently unassignable.
+  await reconcileDriverAssignment(existingDriver._id);
   const trackingBeforeOnline = mergeOnlineSessionIntoTracking(
     existingDriver.incentiveTracking || {},
     existingDriver.incentiveTracking?.currentOnlineStartedAt,

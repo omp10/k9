@@ -56,3 +56,58 @@ export const forceClearDriverAssignment = async (driverId, session = null) => {
   );
   return Boolean(res?.modifiedCount);
 };
+
+const TERMINAL_RIDE_STATUSES = ['completed', 'cancelled'];
+const TERMINAL_ORDER_STATUSES = [
+  'delivered',
+  'cancelled_by_user',
+  'cancelled_by_restaurant',
+  'cancelled_by_admin',
+];
+
+/**
+ * Self-heal a stale busy-lock.
+ *
+ * A lock can outlive its job — the driver force-quits mid-delivery, a release is missed on an
+ * unusual exit path, or the job is cancelled by a flow that doesn't route through the normal
+ * terminal handlers. Without this the driver is permanently unassignable.
+ *
+ * Looks up whatever the lock points at and clears it if that job is gone or already terminal.
+ * A lock on a genuinely live job is left alone. Safe to call often; only writes when stale.
+ *
+ * @returns {Promise<boolean>} true if a stale lock was cleared
+ */
+export const reconcileDriverAssignment = async (driverId) => {
+  if (!driverId) return false;
+
+  const driver = await Driver.findById(driverId).select('activeAssignment').lean();
+  const assignment = driver?.activeAssignment;
+  if (!assignment?.type || !assignment?.id) return false;
+
+  let isStale = false;
+
+  try {
+    if (assignment.type === 'ride') {
+      const { Ride } = await import('../../user/models/Ride.js');
+      const ride = await Ride.findById(assignment.id).select('status').lean();
+      isStale = !ride || TERMINAL_RIDE_STATUSES.includes(String(ride.status || '').toLowerCase());
+    } else if (assignment.type === 'delivery') {
+      const { FoodOrder } = await import('../../../food/orders/models/order.model.js');
+      const order = await FoodOrder.findById(assignment.id).select('orderStatus').lean();
+      isStale = !order || TERMINAL_ORDER_STATUSES.includes(String(order.orderStatus || '').toLowerCase());
+    } else {
+      isStale = true; // unknown type — don't strand the driver
+    }
+  } catch {
+    return false; // lookup failed: leave the lock alone rather than freeing a live job
+  }
+
+  if (!isStale) return false;
+
+  // Clear only if the lock still points at the same job we just judged stale.
+  const res = await Driver.updateOne(
+    { _id: driverId, 'activeAssignment.id': assignment.id },
+    { $set: { activeAssignment: null } },
+  );
+  return Boolean(res?.modifiedCount);
+};

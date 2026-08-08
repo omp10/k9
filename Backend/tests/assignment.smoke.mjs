@@ -93,6 +93,58 @@ async function main() {
     assert.equal((await Driver.findById(d._id).lean()).activeAssignment, null);
   });
 
+  // ---- stale-lock self-heal ----
+  const { reconcileDriverAssignment } = await import('../src/modules/taxi/driver/services/driverAssignmentService.js');
+  const { Ride } = await import('../src/modules/taxi/user/models/Ride.js');
+  const { FoodOrder } = await import('../src/modules/food/orders/models/order.model.js');
+
+  const mkRide = (status) => Ride.create({
+    userId: oid(), status, liveStatus: status === 'completed' ? 'completed' : 'accepted',
+    fare: 100, baseFare: 100,
+    pickupLocation: { type: 'Point', coordinates: [72, 23] },
+    dropLocation: { type: 'Point', coordinates: [72.1, 23.1] },
+  });
+
+  await test('reconcile clears a lock whose ride is already COMPLETED', async () => {
+    const d = await newDriver();
+    const ride = await mkRide('completed');
+    await acquireDriverAssignment(d._id, 'ride', ride._id);
+    assert.equal(await reconcileDriverAssignment(d._id), true, 'should clear');
+    assert.equal((await Driver.findById(d._id).lean()).activeAssignment, null);
+  });
+
+  await test('reconcile clears a lock whose ride no longer exists', async () => {
+    const d = await newDriver();
+    await acquireDriverAssignment(d._id, 'ride', oid()); // dangling id
+    assert.equal(await reconcileDriverAssignment(d._id), true);
+    assert.equal((await Driver.findById(d._id).lean()).activeAssignment, null);
+  });
+
+  await test('reconcile does NOT free a lock on a LIVE ride', async () => {
+    const d = await newDriver();
+    const ride = await mkRide('accepted');
+    await acquireDriverAssignment(d._id, 'ride', ride._id);
+    assert.equal(await reconcileDriverAssignment(d._id), false, 'must leave live job alone');
+    assert.ok((await Driver.findById(d._id).lean()).activeAssignment, 'lock still held');
+  });
+
+  await test('reconcile clears a lock whose order is DELIVERED', async () => {
+    const d = await newDriver();
+    const order = await FoodOrder.create({
+      userId: oid(), restaurantId: oid(), orderStatus: 'delivered',
+      items: [{ itemId: oid(), name: 'x', price: 10, quantity: 1 }],
+      deliveryAddress: { street: 's', city: 'c', state: 'st', location: { type: 'Point', coordinates: [72, 23] } },
+      pricing: { subtotal: 10, total: 10 }, payment: { method: 'cash' },
+    });
+    await acquireDriverAssignment(d._id, 'delivery', order._id);
+    assert.equal(await reconcileDriverAssignment(d._id), true);
+  });
+
+  await test('reconcile is a no-op for a free driver', async () => {
+    const d = await newDriver();
+    assert.equal(await reconcileDriverAssignment(d._id), false);
+  });
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
   await mongoose.disconnect().catch(() => {});
