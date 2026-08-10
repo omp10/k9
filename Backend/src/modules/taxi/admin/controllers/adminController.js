@@ -651,6 +651,19 @@ export const getPublicVehicleTypeCatalog = asyncHandler(async (_req, res) =>
 export const getPublicRentalVehicleCatalog = asyncHandler(async (_req, res) =>
   ok(res, { results: await adminService.listPublicRentalVehicleCatalog() }),
 );
+/**
+ * Public ride/package tariffs for the rider app.
+ *
+ * Passing null as currentAdmin is deliberate: listSetPrices only applies the
+ * set_prices.view permission check and zone/service-location scoping when an
+ * admin is supplied. This mirrors the pre-merge public route exactly, which
+ * called the same service the same way.
+ */
+export const getPublicSetPrices = asyncHandler(async (req, res) => {
+  const data = await adminService.listSetPrices(req.query || {}, null);
+  res.json({ success: true, ...data });
+});
+
 export const getVehiclePreferenceOptions = asyncHandler(async (_req, res) =>
   ok(res, await adminService.listVehiclePreferences()),
 );

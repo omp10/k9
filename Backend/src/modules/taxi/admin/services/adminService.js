@@ -6069,6 +6069,21 @@ export const listSetPrices = async (queryArgs = {}, currentAdmin = null) => {
             active: Number(price.active ?? 1),
           }))
         : [],
+      // Ride fare inputs. These are what the rider app's fare calculator
+      // reads; they were present in the pre-merge public response and were
+      // dropped from this mapping, leaving every fare blank in the app.
+      base_price: Number(item.base_price ?? 0),
+      base_distance: Number(item.base_distance ?? 0),
+      price_per_distance: Number(item.price_per_distance ?? 0),
+      time_price: Number(item.time_price ?? 0),
+      waiting_charge: Number(item.waiting_charge ?? 0),
+      free_waiting_before: Number(item.free_waiting_before ?? 0),
+      free_waiting_after: Number(item.free_waiting_after ?? 0),
+      service_tax: Number(item.service_tax ?? 0),
+      outstation_base_price: Number(item.outstation_base_price ?? 0),
+      outstation_base_distance: Number(item.outstation_base_distance ?? 0),
+      outstation_price_per_distance: Number(item.outstation_price_per_distance ?? 0),
+      outstation_time_price: Number(item.outstation_time_price ?? 0),
       payment_type: Array.isArray(item.payment_type)
         ? item.payment_type
         : (item.payment_type ? String(item.payment_type).split(',') : ['cash', 'online', 'wallet']),
