@@ -331,6 +331,23 @@ orderSchema.index({ 'dispatch.deliveryPartnerId': 1, 'dispatch.status': 1, updat
 orderSchema.index({ 'payment.status': 1, createdAt: -1 });
 orderSchema.index({ 'payment.method': 1, createdAt: -1 });
 
+// A GeoJSON Point with no coordinates is rejected by the 2dsphere index
+// ("Can't extract geo keys"), which made order creation fail for any address that
+// lacked coordinates. location.type defaults to 'Point' while coordinates does not,
+// so strip the whole sub-object unless we have a valid [lng, lat] pair.
+orderSchema.pre('save', function (next) {
+    const loc = this.deliveryAddress?.location;
+    if (loc && (!Array.isArray(loc.coordinates) || loc.coordinates.length !== 2
+        || loc.coordinates.some((n) => typeof n !== 'number' || !Number.isFinite(n)))) {
+        this.deliveryAddress.location = undefined;
+    }
+    const rider = this.lastRiderLocation;
+    if (rider && (!Array.isArray(rider.coordinates) || rider.coordinates.length !== 2)) {
+        this.lastRiderLocation = undefined;
+    }
+    next();
+});
+
 orderSchema.pre('save', async function (next) {
     if (!this.order_id) {
         const timestamp = Date.now().toString().slice(-4);

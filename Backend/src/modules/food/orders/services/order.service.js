@@ -994,17 +994,25 @@ export async function updateOrderStatusRestaurant(
   restaurantId,
   orderStatus,
   note = "",
+  actor = { role: "RESTAURANT", id: null },
 ) {
+  const isAdmin = String(actor?.role || "").toUpperCase() === "ADMIN";
   const identity = buildOrderIdentityFilter(orderId);
-  let order = await FoodOrder.findOne({
-    ...identity,
-    restaurantId: new mongoose.Types.ObjectId(restaurantId),
-  });
+  // An admin acts across restaurants, so the order is not scoped to one restaurantId.
+  let order = await FoodOrder.findOne(
+    isAdmin
+      ? identity
+      : { ...identity, restaurantId: new mongoose.Types.ObjectId(restaurantId) },
+  );
   if (!order) throw new NotFoundError("Order not found");
 
-  // A restaurant may only drive the kitchen-side statuses. picked_up / delivered are owned by
-  // the delivery flow (partner assignment + drop-OTP in completeDelivery) and must not be
-  // settable here, or a restaurant could mark an order delivered with no courier/OTP.
+  // Admin calls arrive without a restaurantId; take it from the order so all downstream
+  // socket rooms / notifications below keep working unchanged.
+  if (isAdmin) restaurantId = order.restaurantId;
+
+  // Only kitchen-side statuses are settable here — picked_up / delivered are owned by the
+  // delivery flow (partner assignment + drop-OTP in completeDelivery), so neither a restaurant
+  // nor an admin may mark an order delivered with no courier/OTP.
   const RESTAURANT_ALLOWED_STATUSES = new Set([
     "confirmed",
     "preparing",
@@ -1012,7 +1020,9 @@ export async function updateOrderStatusRestaurant(
     "cancelled_by_restaurant",
   ]);
   if (!RESTAURANT_ALLOWED_STATUSES.has(orderStatus)) {
-    throw new ValidationError(`Restaurants cannot set order status to '${orderStatus}'.`);
+    throw new ValidationError(
+      `${isAdmin ? "Admins" : "Restaurants"} cannot set order status to '${orderStatus}'.`,
+    );
   }
 
   const from = order.orderStatus;
@@ -1028,8 +1038,8 @@ export async function updateOrderStatusRestaurant(
   }
 
   pushStatusHistory(order, {
-    byRole: "RESTAURANT",
-    byId: restaurantId,
+    byRole: isAdmin ? "ADMIN" : "RESTAURANT",
+    byId: isAdmin ? actor?.id || null : restaurantId,
     from,
     to: orderStatus,
     note: note || "",

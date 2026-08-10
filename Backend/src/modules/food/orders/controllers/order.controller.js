@@ -166,6 +166,28 @@ export async function getOrderByIdRestaurantController(req, res, next) {
     }
 }
 
+/**
+ * Admin equivalent of updateOrderStatusRestaurantController.
+ * Admins act across restaurants, so no restaurantId scoping — but the same kitchen-status
+ * whitelist applies (picked_up / delivered stay owned by the delivery + OTP flow).
+ */
+export async function updateOrderStatusAdminController(req, res, next) {
+    try {
+        const orderId = req.params.orderId;
+        const dto = validateOrderStatusDto(req.body);
+        const order = await orderService.updateOrderStatusRestaurant(
+            orderId,
+            null,
+            dto.orderStatus,
+            dto.note,
+            { role: 'ADMIN', id: req.user?.userId || req.auth?.sub || null },
+        );
+        return sendResponse(res, 200, 'Order status updated', { order });
+    } catch (err) {
+        next(err);
+    }
+}
+
 export async function updateOrderStatusRestaurantController(req, res, next) {
     try {
         const restaurantId = req.user?.userId;

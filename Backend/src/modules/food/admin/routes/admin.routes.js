@@ -203,6 +203,7 @@ router.patch('/dining/restaurants/:restaurantId', diningAdminController.updateDi
 // ----- Orders -----
 router.get('/orders', orderController.listOrdersAdminController);
 router.get('/orders/:orderId', orderController.getOrderByIdAdminController);
+router.patch('/orders/:orderId/status', orderController.updateOrderStatusAdminController);
 router.delete('/orders/:orderId', orderController.deleteOrderAdminController);
 
 // ----- Petpooja Settings & Sync Logs -----

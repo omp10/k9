@@ -939,6 +939,19 @@ export const adminAPI = {
       contextModule: "admin",
     });
   },
+  /** Order status (admin) — admins act across restaurants, so this uses the admin route.
+   *  Kitchen statuses only; picked_up/delivered stay owned by the delivery + OTP flow. */
+  updateOrderStatus: (orderId, body = {}) =>
+    apiClient.patch(`/food/admin/orders/${String(orderId)}/status`, body, {
+      contextModule: "admin",
+    }),
+  acceptOrder: (orderId) =>
+    apiClient.patch(`/food/admin/orders/${String(orderId)}/status`,
+      { orderStatus: "confirmed" }, { contextModule: "admin" }),
+  rejectOrder: (orderId, note = "") =>
+    apiClient.patch(`/food/admin/orders/${String(orderId)}/status`,
+      { orderStatus: "cancelled_by_restaurant", note }, { contextModule: "admin" }),
+
   /** PetPooja integration (admin) */
   getPetpoojaSettings: () =>
     apiClient.get(API_ENDPOINTS.ADMIN.PETPOOJA_SETTINGS, { contextModule: "admin" }),
