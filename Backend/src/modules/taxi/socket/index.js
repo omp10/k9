@@ -29,6 +29,7 @@ import { SOCKET_EVENTS } from './events.js';
 import { registerRideSocketHandlers } from './handlers/rideSocketHandler.js';
 import { authorizeRideRoomAccess } from './middleware/rideRoomAuth.js';
 import { attachSocketAuth } from './middleware/socketAuth.js';
+import { resolveUnifiedDriverIdentity } from '../services/driverIdentityBridge.js';
 import { clearDriverRoute } from './services/driverRouteService.js';
 
 const onAsync = (socket, handler) => async (payload = {}) => {
@@ -48,7 +49,11 @@ export const configureTaxiSocketServer = (io) => {
   setSupportChatServer(io);
 
   io.on('connection', async (socket) => {
-    const identity = socket.auth;
+    // Same bridge as the REST middleware. Rooms are assigned once, here, so a
+    // delivery-app socket that is not translated sits in delivery:<partnerId>
+    // only and every rideRequest — emitted to driver:<driverId> — misses it.
+    const identity = await resolveUnifiedDriverIdentity(socket.auth);
+    socket.auth = identity;
 
     addSocketSubscriptions(socket, { role: identity.role, entityId: identity.sub });
 

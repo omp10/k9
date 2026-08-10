@@ -7,6 +7,7 @@ import { Driver } from '../driver/models/Driver.js';
 import { BusDriver } from '../driver/models/BusDriver.js';
 import { User } from '../user/models/User.js';
 import { verifyAccessToken } from '../services/tokenService.js';
+import { resolveUnifiedDriverIdentity } from '../services/driverIdentityBridge.js';
 import {
   normalizeAdminPermissions,
   normalizeAdminType,
@@ -70,7 +71,7 @@ export const authenticate = (allowedRoles = [], options = {}) => async (req, _re
       throw new ApiError(401, 'Authorization token is required');
     }
 
-    const payload = verifyAccessToken(token);
+    const payload = await resolveUnifiedDriverIdentity(verifyAccessToken(token));
 
     const normalizedRole = normalizeRole(payload.role);
     const normalizedAllowedRoles = allowedRoles.map(normalizeRole);
