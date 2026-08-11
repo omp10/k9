@@ -266,6 +266,31 @@ export async function confirmReachedDropDeliveryController(req, res, next) {
     }
 }
 
+/** GET /food/delivery/orders/:orderId/route — rider's own map. */
+export async function getOrderRouteDeliveryController(req, res, next) {
+    try {
+        const data = await orderService.getOrderRoute(req.params.orderId, {
+            lat: req.query.lat,
+            lng: req.query.lng,
+            target: req.query.target,
+        });
+        return sendResponse(res, 200, 'Route', data);
+    } catch (err) {
+        next(err);
+    }
+}
+
+/** GET /food/orders/:orderId/route — customer tracking map. Origin and leg are
+ *  both resolved server-side; the customer has no business choosing either. */
+export async function getOrderRouteUserController(req, res, next) {
+    try {
+        const data = await orderService.getOrderRoute(req.params.orderId, {});
+        return sendResponse(res, 200, 'Route', data);
+    } catch (err) {
+        next(err);
+    }
+}
+
 export async function verifyDropOtpDeliveryController(req, res, next) {
     try {
         const deliveryPartnerId = req.user?.userId;

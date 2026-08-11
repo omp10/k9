@@ -1259,6 +1259,8 @@ export async function confirmReachedDropDelivery(orderId, deliveryPartnerId) {
   return deliveryService.confirmReachedDropDelivery(orderId, deliveryPartnerId);
 }
 
+export { getOrderRoute } from './order-route.service.js';
+
 export async function verifyDropOtpDelivery(orderId, deliveryPartnerId, otp) {
   return deliveryService.verifyDropOtpDelivery(orderId, deliveryPartnerId, otp);
 }

@@ -9,6 +9,7 @@ import {
     cancelOrderController,
     submitOrderRatingsController,
     getOrderDropOtpUserController,
+    getOrderRouteUserController,
     updateOrderInstructionsController
 } from '../controllers/order.controller.js';
 
@@ -20,6 +21,7 @@ router.post('/verify-payment', verifyPaymentController);
 router.get('/', listOrdersUserController);
 router.get('/:orderId/payments', getOrderPaymentsUserController);
 router.get('/:orderId/drop-otp', getOrderDropOtpUserController);
+router.get('/:orderId/route', getOrderRouteUserController);
 router.get('/:orderId', getOrderByIdUserController);
 router.patch('/:orderId/cancel', cancelOrderController);
 router.patch('/:orderId/ratings', submitOrderRatingsController);
