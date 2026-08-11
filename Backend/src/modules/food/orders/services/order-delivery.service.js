@@ -179,25 +179,30 @@ export async function getCurrentTripDelivery(deliveryPartnerId) {
 
 export async function listOrdersAvailableDelivery(deliveryPartnerId, query) {
   const { page, limit, skip } = buildPaginationOptions(query);
-  const filter = {
-    $or: [
-      {
-        'dispatch.status': 'unassigned',
-        orderStatus: { $in: ['confirmed', 'preparing', 'ready_for_pickup'] },
-      },
-      {
-        'dispatch.deliveryPartnerId': new mongoose.Types.ObjectId(deliveryPartnerId),
-        orderStatus: {
-          $nin: [
-            'delivered',
-            'cancelled_by_user',
-            'cancelled_by_restaurant',
-            'cancelled_by_admin',
-          ],
-        },
-      },
-    ],
+
+  const unassignedOffers = {
+    'dispatch.status': 'unassigned',
+    orderStatus: { $in: ['confirmed', 'preparing', 'ready_for_pickup'] },
   };
+  const ownOrders = {
+    'dispatch.deliveryPartnerId': new mongoose.Types.ObjectId(deliveryPartnerId),
+    orderStatus: {
+      $nin: [
+        'delivered',
+        'cancelled_by_user',
+        'cancelled_by_restaurant',
+        'cancelled_by_admin',
+      ],
+    },
+  };
+
+  // A Taxi-only driver sees no new food offers. Their OWN in-progress order is
+  // always included regardless of mode — switching the toggle mid-delivery must
+  // not make the job they are currently doing disappear.
+  const acceptsDeliveries = await partnerAcceptsDeliveries(deliveryPartnerId);
+  const filter = acceptsDeliveries
+    ? { $or: [unassignedOffers, ownOrders] }
+    : ownOrders;
 
   const [docs, total] = await Promise.all([
     FoodOrder.find(filter)
@@ -242,6 +247,28 @@ export async function listOrdersAvailableDelivery(deliveryPartnerId, query) {
 async function resolveUnifiedDriverId(deliveryPartnerId) {
   const p = await FoodDeliveryPartner.findById(deliveryPartnerId).select('driverId').lean();
   return p?.driverId || null;
+}
+
+/**
+ * Does this partner's work mode currently accept food deliveries?
+ *
+ * Dispatch already refuses to *offer* a food job to a driver set to Taxi-only,
+ * but the available-orders list is polled every 15s and had no such filter — so
+ * the toggle looked broken: orders kept appearing that could never be assigned.
+ * Flag-gated and fail-open, matching the rest of the unified-driver code.
+ */
+async function partnerAcceptsDeliveries(deliveryPartnerId) {
+  if (!config.unifiedDispatchEnabled) return true;
+  const driverId = await resolveUnifiedDriverId(deliveryPartnerId);
+  if (!driverId) return true; // not migrated yet — don't hide their work
+  const { Driver } = await import('../../../taxi/driver/models/Driver.js');
+  const driver = await Driver.findById(driverId)
+    .select('workMode serviceCapabilities')
+    .lean();
+  if (!driver) return true;
+  const workMode = driver.workMode || 'all';
+  const caps = Array.isArray(driver.serviceCapabilities) ? driver.serviceCapabilities : [];
+  return ['all', 'delivery'].includes(workMode) && caps.includes('delivery');
 }
 
 /**
