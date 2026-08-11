@@ -40,7 +40,6 @@ const unwrapLoginPayload = (response) => {
   return payload?.token ? payload : payload?.data || {};
 };
 
-const generateOTP = () => String(Math.floor(1000 + Math.random() * 9000));
 const DRIVER_PLACEHOLDER = { name: 'Delivery Captain', rating: '4.9', vehicle: 'Bike', plate: 'Assigned', phone: '', eta: 2 };
 const STAGES = { SEARCHING: 'searching', ACCEPTED: 'accepted' };
 const ACTIVE_DELIVERY_POLL_MS = 1500;
@@ -303,7 +302,10 @@ const ParcelSearchingDriver = () => {
   const userHomeRoute = routePrefix || '/taxi/user';
   const [stage, setStage] = useState(STAGES.SEARCHING);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
-  const [otp] = useState(generateOTP);
+  // The start-ride OTP is issued by the backend when the ride is created and is what the
+  // driver's app verifies. Never generate it client-side — a locally invented code can never
+  // match ride.otp, so the driver always gets "Invalid OTP".
+  const [otp, setOtp] = useState('');
   const [driver, setDriver] = useState(DRIVER_PLACEHOLDER);
   const [searchStatus, setSearchStatus] = useState('Preparing dispatch...');
   const [bookingError, setBookingError] = useState('');
@@ -458,7 +460,7 @@ const ParcelSearchingDriver = () => {
           routeState.dropCoords,
         ) || resolvedDropCoords,
         rideId: activeRideIdRef.current,
-        otp,
+        otp: rideSnapshot?.otp || otp,
         driver: nextDriver,
         fare: rideSnapshot?.fare ?? routeState.fare ?? routeState.estimatedFare?.min ?? null,
         vehicleIconUrl: rideSnapshot?.vehicleIconUrl || routeState.vehicleIconUrl || routeState.vehicle?.vehicleIconUrl || routeState.vehicle?.icon || '',
@@ -467,6 +469,7 @@ const ParcelSearchingDriver = () => {
         parcel: rideSnapshot?.parcel || routeState.parcel || null,
       };
 
+      if (rideSnapshot?.otp) setOtp(String(rideSnapshot.otp));
       saveCurrentRide(nextRide);
       clearInterval(activeRidePollRef.current);
       clearTimeout(searchTimeoutRef.current);
