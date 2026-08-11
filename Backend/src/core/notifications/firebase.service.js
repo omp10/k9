@@ -315,11 +315,22 @@ export const upsertFirebaseDeviceToken = async ({ ownerType, ownerId, token, pla
         throw new Error(`Unsupported owner type: ${ownerType}`);
     }
     const existingTokens = readTokenFieldAsList(doc, field);
-    
     const tokens = normalizeTokenList([...existingTokens, normalizedToken]);
-    writeTokenFieldFromList(doc, field, tokens);
-    
-    await doc.save();
+
+    // Atomic $set rather than doc.save(). save() sends back the __v it read, so
+    // two concurrent registrations — the app registers on launch AND on every
+    // resume — race, and the loser throws VersionError and 500s. The token then
+    // never lands, and that device silently receives no pushes at all.
+    await model.updateOne(
+      { _id: doc._id },
+      {
+        $set: {
+          [field]: Array.isArray(doc[field])
+            ? tokens
+            : (tokens[tokens.length - 1] || ''),
+        },
+      },
+    );
     return { success: true };
 };
 

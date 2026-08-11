@@ -209,6 +209,13 @@ const sendPushToTargets = async ({
   };
 };
 
+// Deliberately asks listEntityPushTokens rather than eyeballing the fields:
+// it reads only fcmTokens and fcmTokenMobile, NOT fcmTokenWeb. Checking
+// fcmTokenWeb here made a driver holding nothing but a stale web token look
+// covered, so the delivery-partner fallback never ran and the push had zero
+// targets — which is exactly how a driver ends up receiving no ride alerts.
+const hasAnyPushToken = (doc) => listEntityPushTokens(doc, 'driver').length > 0;
+
 const collectDirectTargets = async ({ userIds = [], driverIds = [] }) => {
   const normalizedUserIds = [...new Set((Array.isArray(userIds) ? userIds : []).map((id) => String(id || '').trim()).filter(Boolean))];
   const normalizedDriverIds = [...new Set((Array.isArray(driverIds) ? driverIds : []).map((id) => String(id || '').trim()).filter(Boolean))];
@@ -231,11 +238,38 @@ const collectDirectTargets = async ({ userIds = [], driverIds = [] }) => {
 
   if (normalizedDriverIds.length) {
     const drivers = await Driver.find({ _id: { $in: normalizedDriverIds } })
-      .select('_id fcmTokenWeb fcmTokenMobile')
+      .select('_id fcmTokenWeb fcmTokenMobile legacyDeliveryPartnerId')
       .lean();
 
+    // A driver who signed in through the delivery app registered their push
+    // token against the FoodDeliveryPartner document, because that is the
+    // identity their token carries. Reading only the Driver document finds
+    // nothing, so the ride offer goes out over the socket alone and a
+    // backgrounded driver never hears about it.
+    const partnerIds = drivers
+      .filter((d) => d.legacyDeliveryPartnerId && !hasAnyPushToken(d))
+      .map((d) => d.legacyDeliveryPartnerId);
+
+    let partnerTokens = new Map();
+    if (partnerIds.length) {
+      const { FoodDeliveryPartner } = await import('../../food/delivery/models/deliveryPartner.model.js');
+      const partners = await FoodDeliveryPartner.find({ _id: { $in: partnerIds } })
+        .select('_id fcmTokenMobile')
+        .lean();
+      // Mobile only. The partner's fcmTokens list holds *web* tokens from the
+      // dashboard; a ride offer pushed to a browser tab is noise at best, and
+      // those tokens outnumber the real device 5:1 on live accounts.
+      partnerTokens = new Map(partners.map((p) => [String(p._id), { fcmTokenMobile: p.fcmTokenMobile }]));
+    }
+
     drivers.forEach((driver) => {
-      listEntityPushTokens(driver, 'driver').forEach((tokenEntry) => {
+      const source = hasAnyPushToken(driver)
+        ? driver
+        : partnerTokens.get(String(driver.legacyDeliveryPartnerId)) || driver;
+
+      // entityId stays the DRIVER id wherever the token came from — delivery
+      // receipts and stale-token cleanup are keyed on it.
+      listEntityPushTokens(source, 'driver').forEach((tokenEntry) => {
         targets.push({
           ...tokenEntry,
           entityId: String(driver._id),
