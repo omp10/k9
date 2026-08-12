@@ -2349,6 +2349,13 @@ export const orderAPI = {
 
         return res;
       }),
+  /** Drop OTP for the customer to read out to the delivery partner.
+   *  Order payloads deliberately strip the code (sanitizeOrderForExternal), and the
+   *  `delivery_drop_otp` socket event is one-shot — so this endpoint is the only way to
+   *  recover the code after a reload / backgrounded app / dropped socket. */
+  getDropOtp: (orderId) =>
+    apiClient.get(`/food/orders/${String(orderId)}/drop-otp`, { contextModule: "user" }),
+
   getOrderDetails: (() => {
     const inFlight = new Map();
     const cache = new Map();

@@ -795,6 +795,30 @@ export default function OrderTracking() {
     return code ? String(code) : null
   }, [order?.deliveryVerification?.dropOtp?.code, socketDropOtpCode])
 
+  // The order payload strips the OTP and the socket event fires once, so a reload or a
+  // backgrounded app leaves the customer with no code to read out — and the driver then
+  // gets "OTP verification failed". Fetch it from the API whenever it's required and we
+  // don't have it.
+  const dropOtpRequired = Boolean(order?.deliveryVerification?.dropOtp?.required)
+  const dropOtpVerified = Boolean(order?.deliveryVerification?.dropOtp?.verified)
+  useEffect(() => {
+    if (!dropOtpRequired || dropOtpVerified || customerDeliveryOtp) return
+    const lookupId = resolvedLookupId || orderId
+    if (!lookupId) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await orderAPI.getDropOtp(lookupId)
+        const payload = res?.data?.data ?? res?.data ?? {}
+        const code = payload.otp ?? payload.dropOtp ?? payload.code
+        if (!cancelled && code) setSocketDropOtpCode(String(code))
+      } catch {
+        // Non-fatal: the socket event may still deliver it.
+      }
+    })()
+    return () => { cancelled = true }
+  }, [dropOtpRequired, dropOtpVerified, customerDeliveryOtp, resolvedLookupId, orderId])
+
   useEffect(() => {
     if (!isEditWindowOpen) return
     const interval = setInterval(() => {
