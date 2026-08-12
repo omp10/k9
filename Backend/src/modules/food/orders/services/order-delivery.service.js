@@ -59,7 +59,10 @@ function emitOrderUpdate(order, deliveryPartnerId) {
 
     // Only send push notifications for key delivery milestones
     const status = order.orderStatus;
-    if (!['picked_up', 'reached_drop', 'delivered'].includes(status)) return;
+    // Every milestone the rider drives, not just the last three. 'accepted'
+    // and 'reached_pickup' were silently skipped, so the rider got nothing
+    // between taking the job and picking it up.
+    if (!['accepted', 'reached_pickup', 'picked_up', 'reached_drop', 'delivered'].includes(status)) return;
 
     let userTitle = '';
     let userBody = '';
@@ -68,7 +71,13 @@ function emitOrderUpdate(order, deliveryPartnerId) {
 
     const orderId = order._id.toString();
 
-    if (status === 'picked_up') {
+    if (status === 'accepted') {
+      riderTitle = 'Order accepted';
+      riderBody = `Order #${orderId} is yours. Head to the restaurant to collect it.`;
+    } else if (status === 'reached_pickup') {
+      riderTitle = 'At the restaurant';
+      riderBody = `You have reached the restaurant for order #${orderId}. Collect the order and confirm pickup.`;
+    } else if (status === 'picked_up') {
       userTitle = 'Order on the way!';
       userBody = `Partner has picked up your order #${orderId} and is heading your way.`;
       riderTitle = 'Order picked up!';
@@ -117,7 +126,10 @@ function emitOrderUpdate(order, deliveryPartnerId) {
         {
           title: riderTitle,
           body: riderBody,
-          dataOnly: true,
+          // Deliberately NOT dataOnly. A data-only push omits the notification
+          // block, so the OS shows nothing and the app must render it itself —
+          // which the driver app's background handler does not do for these
+          // types. That is why none of these milestones ever appeared.
           data: {
             type: status === 'delivered' ? 'order_completed' : 'order_status_update',
             orderId,
@@ -662,6 +674,10 @@ export async function confirmPickupDelivery(orderId, deliveryPartnerId, billImag
 
   // Pre-generate handover OTP so user can see it as soon as food is on the way
   const existingOtp = String(order.deliveryOtp || '').trim();
+  console.log(
+    `[OTP LIFECYCLE] reached_drop order=${order.orderId} existing="${existingOtp}" ` +
+    `action=${existingOtp ? 'REUSED (customer code stays valid)' : 'GENERATED (none existed)'}`,
+  );
   if (!existingOtp) {
     order.deliveryOtp = generateFourDigitDeliveryOtp();
     order.deliveryVerification = {
@@ -672,6 +688,7 @@ export async function confirmPickupDelivery(orderId, deliveryPartnerId, billImag
     };
   }
 
+  console.log(`[OTP LIFECYCLE] pickup order=${order.orderId} otp="${String(order.deliveryOtp || '').trim()}" (shown to customer)`);
   emitDeliveryDropOtpToUser(order, String(order.deliveryOtp || "").trim());
 
   pushStatusHistory(order, {
@@ -719,8 +736,17 @@ export async function confirmReachedDropDelivery(orderId, deliveryPartnerId) {
     order.orderStatus ||
     '';
 
+  // Never regenerate a code the customer has already been shown.
+  //
+  // confirmPickupDelivery generates the handover OTP and pushes it to the
+  // customer at pickup. This used to fire on '!alreadyAtDrop', which is true on
+  // the first "reached drop" tap — so the code was silently replaced while the
+  // customer was still looking at the old one. They read out a number that no
+  // longer existed on any order and the rider got "Invalid OTP" forever.
+  //
+  // Generate only when there genuinely is no code to hand over.
   const existingOtp = String(order.deliveryOtp || '').trim();
-  if (!alreadyAtDrop || !existingOtp) {
+  if (!existingOtp) {
     order.deliveryOtp = generateFourDigitDeliveryOtp();
     order.deliveryVerification = {
       ...(order.deliveryVerification?.toObject?.() ||

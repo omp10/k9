@@ -22,6 +22,7 @@ import {
   submitRideFeedback,
   updateRideLifecycle,
   markUserCancellationDuesAsRecovered,
+  notifyDriverRideStage,
 } from '../../services/rideService.js';
 import {
   cancelRideByUser,
@@ -460,6 +461,9 @@ export const updateRideStatus = async (req, res) => {
     timeChargeAmount: ride.timeChargeAmount || 0,
   };
 
+  // Fired only after updateRideLifecycle has persisted the move, so a
+  // rejected transition never produces a notification.
+  notifyDriverRideStage(ride, nextStatus);
   emitToRideRoom(ride._id, SOCKET_EVENTS.RIDE_STATUS_UPDATED, payload);
   emitToRideRoom(ride._id, SOCKET_EVENTS.RIDE_STATE, serializeRideRealtime(ride));
 
