@@ -2100,8 +2100,26 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
     }
   }
 
-  if (driverPaymentCollection) {
+  // driverPaymentCollection is the Razorpay collection-link record — an
+  // object. The driver app was sending a boolean here to mean "I took the
+  // cash", and assigning it threw
+  //   Cast to Object failed for value "true" at path "driverPaymentCollection"
+  // out of ride.save(), which aborted the whole completion at the moment the
+  // driver had already collected the fare: money taken, trip stuck open.
+  //
+  // The app no longer sends it, but old builds in the field still do, so
+  // never let a malformed value block the completion. Cash owed is derived
+  // from paymentMethod by settleCompletedRideWallet and needs nothing here.
+  if (
+    driverPaymentCollection &&
+    typeof driverPaymentCollection === 'object' &&
+    !Array.isArray(driverPaymentCollection)
+  ) {
     ride.driverPaymentCollection = driverPaymentCollection;
+  } else if (driverPaymentCollection) {
+    logger.warn(
+      `Ignoring non-object driverPaymentCollection (${typeof driverPaymentCollection}) on ride ${ride._id}`,
+    );
   }
 
   await ride.save();
