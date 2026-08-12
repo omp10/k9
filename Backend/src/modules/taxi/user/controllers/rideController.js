@@ -22,6 +22,7 @@ import {
   submitRideFeedback,
   updateRideLifecycle,
   markUserCancellationDuesAsRecovered,
+  notifyDriverRideStage,
 } from '../../services/rideService.js';
 import {
   cancelRideByUser,
@@ -460,6 +461,9 @@ export const updateRideStatus = async (req, res) => {
     timeChargeAmount: ride.timeChargeAmount || 0,
   };
 
+  // Fired only after updateRideLifecycle has persisted the move, so a
+  // rejected transition never produces a notification.
+  notifyDriverRideStage(ride, nextStatus);
   emitToRideRoom(ride._id, SOCKET_EVENTS.RIDE_STATUS_UPDATED, payload);
   emitToRideRoom(ride._id, SOCKET_EVENTS.RIDE_STATE, serializeRideRealtime(ride));
 
@@ -1074,11 +1078,13 @@ export const listAvailableDrivers = async (req, res) => {
   const longitude = Number(lng);
   const distance = Number(maxDistance);
 
-  if (!vehicleTypeId) {
-    throw new ApiError(400, 'vehicleTypeId is required');
-  }
-
-  if (!mongoose.Types.ObjectId.isValid(vehicleTypeId)) {
+  // vehicleTypeId is an optional narrowing, not a requirement: the map wants
+  // every vehicle around the rider, whatever its type, and was polling this
+  // endpoint every 20s only to be 400'd — so the rider never saw a single live
+  // vehicle. buildDriverMatchFilters already yields an empty vehicle clause
+  // when no type is given, and baseFilters still constrains the result to
+  // drivers who are online, not mid-ride and not otherwise engaged.
+  if (vehicleTypeId && !mongoose.Types.ObjectId.isValid(vehicleTypeId)) {
     throw new ApiError(400, 'vehicleTypeId is invalid');
   }
 

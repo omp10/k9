@@ -291,6 +291,21 @@ export async function getOrderRouteUserController(req, res, next) {
     }
 }
 
+/** PATCH /food/delivery/orders/:orderId/rate-customer */
+export async function rateCustomerDeliveryController(req, res, next) {
+    try {
+        const deliveryPartnerId = req.user?.userId;
+        const result = await orderService.rateCustomerDelivery(
+            req.params.orderId,
+            deliveryPartnerId,
+            req.body || {},
+        );
+        return sendResponse(res, 200, 'Customer rated', result);
+    } catch (err) {
+        next(err);
+    }
+}
+
 export async function verifyDropOtpDeliveryController(req, res, next) {
     try {
         const deliveryPartnerId = req.user?.userId;

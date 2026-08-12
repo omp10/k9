@@ -178,7 +178,12 @@ const orderEntityRatingSchema = new mongoose.Schema(
 const orderRatingsSchema = new mongoose.Schema(
     {
         restaurant: { type: orderEntityRatingSchema, default: undefined },
-        deliveryPartner: { type: orderEntityRatingSchema, default: undefined }
+        deliveryPartner: { type: orderEntityRatingSchema, default: undefined },
+        // The rider's rating of the CUSTOMER. The two above are both ratings
+        // given BY the customer; there was nowhere to record the other
+        // direction, which is why the driver app's rate-customer call had no
+        // endpoint to land on.
+        customer: { type: orderEntityRatingSchema, default: undefined }
     },
     { _id: false }
 );

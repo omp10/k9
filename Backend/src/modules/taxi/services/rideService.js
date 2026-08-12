@@ -6,6 +6,7 @@ import { sendTaxiInvoiceWhatsApp } from '../../../services/whatsapp.service.js';
 import { ApiError } from '../../../utils/ApiError.js';
 import { normalizePoint, toPoint } from '../../../utils/geo.js';
 import { RIDE_LIVE_STATUS, RIDE_STATUS } from '../constants/index.js';
+import { sendPushNotificationToEntities } from './pushNotificationService.js';
 import { AdminBusinessSetting } from '../admin/models/AdminBusinessSetting.js';
 import { SetPrice } from '../admin/models/SetPrice.js';
 import { Vehicle } from '../admin/models/Vehicle.js';
@@ -377,6 +378,51 @@ const processCompletedDriverReferralReward = async (ride) => {
 
 const normalizeAddress = (value = '') => String(value || '').trim();
 const generateRideOtp = () => String(Math.floor(1000 + Math.random() * 9000));
+
+/**
+ * Tells the driver their ride moved on.
+ *
+ * They received the offer and a cancellation and nothing in between, so a
+ * driver whose app was backgrounded mid-trip had no way to learn the ride had
+ * advanced — including the completion that settles their fare.
+ *
+ * Not data-only on purpose: the driver app only renders a data-only push for
+ * the offer itself, so anything else must carry a notification block or the OS
+ * shows nothing at all.
+ */
+export const notifyDriverRideStage = (ride, stage) => {
+  if (!ride?.driverId) return;
+
+  const copy = {
+    accepted: { title: 'Ride accepted', body: 'Head to the pickup point.' },
+    arriving: { title: 'On the way to pickup', body: 'Navigate to the passenger.' },
+    started: { title: 'Trip started', body: 'Passenger on board. Drive safely.' },
+    arrived: { title: 'Reached destination', body: 'Collect the fare and complete the trip.' },
+    completed: {
+      title: 'Trip completed',
+      body: `Fare Rs ${Number(ride.fare || 0)} for this trip.`,
+    },
+  }[stage];
+
+  if (!copy) return;
+
+  sendPushNotificationToEntities({
+    driverIds: [String(ride.driverId)],
+    title: copy.title,
+    body: copy.body,
+    data: {
+      type: 'ride_status_update',
+      rideId: String(ride._id),
+      liveStatus: String(stage),
+    },
+  }).catch((error) => {
+    console.error('Failed to send driver ride-stage push', error);
+  });
+};
+
+/** Digits only — a soft keyboard can slip a space or full stop in beside
+ *  them, and the driver has no way to see that they did. */
+const digitsOnlyOtp = (v) => String(v ?? '').replace(/\D/g, '');
 const DEFAULT_BID_STEP_AMOUNT = 10;
 const DEFAULT_MAX_BID_STEPS = 5;
 
@@ -1888,10 +1934,20 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
   // ponytail: enforce for every ride that has an OTP (all rides get one at creation),
   // not just pooled rides — otherwise a driver can start without the rider present.
   if (nextStatus === RIDE_LIVE_STATUS.STARTED && ride.otp) {
+    // TEMPORARY DEBUG — remove once the OTP mismatch is understood.
+    const otpCodes = (s) => [...String(s)].map((c) => c.charCodeAt(0)).join(',');
+    console.log(
+      `[OTP CHECK] ride=${ride._id} ` +
+      `raw=${JSON.stringify(otp)} ` +
+      `entered="${String(otp ?? '')}" len=${String(otp ?? '').length} codes=[${otpCodes(otp ?? '')}] ` +
+      `expected="${String(ride.otp)}" len=${String(ride.otp).length} codes=[${otpCodes(ride.otp)}] ` +
+      `MATCH=${String(ride.otp) === String(otp)}`
+    );
+
     if (!otp) {
       throw new ApiError(400, 'OTP is required to start the ride');
     }
-    if (String(ride.otp) !== String(otp)) {
+    if (digitsOnlyOtp(ride.otp) !== digitsOnlyOtp(otp)) {
       throw new ApiError(400, 'Invalid OTP code');
     }
   }
@@ -2044,8 +2100,26 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
     }
   }
 
-  if (driverPaymentCollection) {
+  // driverPaymentCollection is the Razorpay collection-link record — an
+  // object. The driver app was sending a boolean here to mean "I took the
+  // cash", and assigning it threw
+  //   Cast to Object failed for value "true" at path "driverPaymentCollection"
+  // out of ride.save(), which aborted the whole completion at the moment the
+  // driver had already collected the fare: money taken, trip stuck open.
+  //
+  // The app no longer sends it, but old builds in the field still do, so
+  // never let a malformed value block the completion. Cash owed is derived
+  // from paymentMethod by settleCompletedRideWallet and needs nothing here.
+  if (
+    driverPaymentCollection &&
+    typeof driverPaymentCollection === 'object' &&
+    !Array.isArray(driverPaymentCollection)
+  ) {
     ride.driverPaymentCollection = driverPaymentCollection;
+  } else if (driverPaymentCollection) {
+    logger.warn(
+      `Ignoring non-object driverPaymentCollection (${typeof driverPaymentCollection}) on ride ${ride._id}`,
+    );
   }
 
   await ride.save();

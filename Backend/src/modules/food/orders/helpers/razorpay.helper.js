@@ -51,7 +51,16 @@ export function createRazorpayOrder(amountPaise, currency = 'INR', receipt = '')
             logger.error(`[Razorpay] Order Creation Failed: ${errMsg}`);
             
             if (errMsg.includes('Authentication failed') || errMsg.includes('invalid api key')) {
-                const isMockAllowed = config.nodeEnv !== 'production' || config.useDefaultOtp;
+                // Strictly non-production. This used to also fire on
+                // config.useDefaultOtp, which is the *login* OTP shortcut — and
+                // with NODE_ENV=production plus USE_DEFAULT_OTP=true the OR was
+                // true, so a live deployment with rejected Razorpay credentials
+                // silently handed the app a "mock_order_..." id instead of
+                // surfacing the 401. The rider was sent to a checkout that could
+                // never succeed and the order sat in pending_payment.
+                //
+                // A login convenience flag must never mint payment orders.
+                const isMockAllowed = config.nodeEnv !== 'production';
                 if (isMockAllowed) {
                     logger.warn(`[Razorpay] Generating fallback Mock Order due to Authentication failed`);
                     return {
