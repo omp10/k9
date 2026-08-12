@@ -775,7 +775,13 @@ export async function verifyDropOtpDelivery(orderId, deliveryPartnerId, otp) {
     return { order: sanitizeOrderForExternal(order) };
   }
 
-  const otpStr = String(otp || '').trim();
+  // Compare digits only. OTPs are numeric, and a soft keyboard can slip a
+  // space, comma or full stop in beside them — trim() alone catches the
+  // trailing space but not a stray '.' in the middle, which then fails a
+  // comparison the driver has every reason to believe was correct.
+  const digitsOnlyOtp = (v) => String(v ?? '').replace(/\D/g, '');
+
+  const otpStr = digitsOnlyOtp(otp);
   if (!otpStr) throw new ValidationError('OTP is required');
 
   if (!order.deliveryVerification?.dropOtp?.required) {
@@ -784,7 +790,20 @@ export async function verifyDropOtpDelivery(orderId, deliveryPartnerId, otp) {
     );
   }
 
-  const expected = String(order.deliveryOtp || '').trim();
+  const expected = digitsOnlyOtp(order.deliveryOtp);
+
+  // TEMPORARY DEBUG — remove once the OTP mismatch is understood.
+  // Character codes are the point: a trailing space or a full stop from the
+  // numeric keypad looks identical in a log but shows up here immediately.
+  const codes = (s) => [...String(s)].map((c) => c.charCodeAt(0)).join(',');
+  logger.info(
+    `[OTP CHECK] food order=${order.order_id || order._id} ` +
+    `raw=${JSON.stringify(otp)} ` +
+    `entered="${otpStr}" len=${otpStr.length} codes=[${codes(otpStr)}] ` +
+    `expected="${expected}" len=${expected.length} codes=[${codes(expected)}] ` +
+    `MATCH=${expected === otpStr}`
+  );
+
   if (!expected || expected !== otpStr) {
     throw new ValidationError(
       'Invalid OTP. Ask the customer for the code shown in their app.',
@@ -803,6 +822,44 @@ export async function verifyDropOtpDelivery(orderId, deliveryPartnerId, otp) {
     deliveryPartnerId,
   });
   return { order: sanitizeOrderForExternal(order) };
+}
+
+/**
+ * Rider rates the customer after handover.
+ *
+ * Idempotent by overwrite: a rider correcting a mis-tap should not be an error,
+ * and there is nothing to gain by locking the first value in.
+ */
+export async function rateCustomerDelivery(orderId, deliveryPartnerId, body = {}) {
+  const identity = buildOrderIdentityFilter(orderId);
+  if (!identity) throw new ValidationError('Order id required');
+
+  const rating = Number(body.rating);
+  if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+    throw new ValidationError('rating must be a whole number from 1 to 5');
+  }
+
+  const order = await FoodOrder.findOne(identity);
+  if (!order) throw new NotFoundError('Order not found');
+
+  if (
+    order.dispatch?.deliveryPartnerId?.toString() !== deliveryPartnerId.toString()
+  ) {
+    throw new ForbiddenError('Not your order');
+  }
+
+  order.ratings = {
+    ...(order.ratings?.toObject?.() || order.ratings || {}),
+    customer: {
+      rating: Math.round(rating),
+      comment: String(body.comment || '').trim(),
+      ratedAt: new Date(),
+    },
+  };
+  order.markModified('ratings');
+  await order.save();
+
+  return { success: true, ratings: order.ratings };
 }
 
 export async function completeDelivery(orderId, deliveryPartnerId, body = {}) {
