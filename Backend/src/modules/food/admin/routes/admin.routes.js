@@ -1,4 +1,5 @@
 import express from 'express';
+import { isAdminRole } from '../../../../utils/roles.js';
 import { AuthError } from '../../../../core/auth/errors.js';
 import * as adminController from '../controllers/admin.controller.js';
 import * as foodApprovalController from '../controllers/foodApproval.controller.js';
@@ -18,7 +19,9 @@ router.get('/business-settings/public', businessSettingsController.getBusinessSe
 
 const requireAdmin = (req, _res, next) => {
     const user = req.user;
-    if (!user || user.role !== 'ADMIN') {
+    // Uses the shared check so SUPER_ADMIN / PLATFORM_SUPERADMIN etc. are accepted here too;
+    // a literal === 'ADMIN' locked super-admins out of the whole food admin panel.
+    if (!user || !isAdminRole(user.role)) {
         return next(new AuthError('Admin access required'));
     }
     return next();
