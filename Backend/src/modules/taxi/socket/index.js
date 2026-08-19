@@ -160,7 +160,7 @@ export const configureTaxiSocketServer = (io) => {
 
     socket.on(
       'requestRide',
-      onAsync(socket, async ({ pickup, drop, fare, estimatedDistanceMeters, estimatedDurationMinutes, vehicleTypeId, vehicleIconType, paymentMethod, serviceType, intercity }) => {
+      onAsync(socket, async ({ pickup, drop, fare, estimatedDistanceMeters, estimatedDurationMinutes, vehicleTypeId, vehicleIconType, paymentMethod, serviceType, intercity, safeRide }) => {
         if (identity.role !== 'user') {
           return;
         }
@@ -178,6 +178,8 @@ export const configureTaxiSocketServer = (io) => {
           paymentMethod,
           serviceType,
           intercity,
+          // Safe Ride ("drunk mode"): tariff resolved server-side from the admin config.
+          safeRide: Boolean(safeRide),
         });
 
         joinRideRoom(socket, ride._id);

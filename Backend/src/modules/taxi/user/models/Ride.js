@@ -477,6 +477,20 @@ const rideSchema = new mongoose.Schema(
       default: false,
       index: true,
     },
+    /**
+     * Safe Ride: booked by a passenger who has been drinking, on the dedicated tariff
+     * configured per vehicle in SetPrice.safe_ride. Recorded on the ride so fare, receipts
+     * and support can all explain why this trip was priced differently.
+     */
+    safeRide: {
+      isSafeRide: { type: Boolean, default: false, index: true },
+      /** What the rider agreed to, captured at booking time for dispute handling. */
+      acknowledgedAt: { type: Date, default: null },
+      /** Extra charged over the standard tariff, for the fare breakdown. */
+      surchargeAmount: { type: Number, default: 0, min: 0 },
+      /** Snapshot of the safe_ride block used, so later admin edits don't rewrite history. */
+      pricingSnapshot: { type: mongoose.Schema.Types.Mixed, default: null },
+    },
     poolSeats: {
       type: Number,
       default: 1,

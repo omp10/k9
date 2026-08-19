@@ -360,6 +360,9 @@ export const createRide = async (req, res) => {
     bookingMode,
     userMaxBidFare,
     bidStepAmount,
+    // Safe Ride ("drunk mode"): the tariff is resolved server-side from the admin config,
+    // so the client only says whether the rider chose the option.
+    safeRide: Boolean(req.body?.safeRide),
   });
 
   await startDispatchFlow(ride);

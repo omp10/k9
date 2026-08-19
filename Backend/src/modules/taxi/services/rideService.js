@@ -23,6 +23,7 @@ import { User } from '../user/models/User.js';
 import { UserWallet } from '../user/models/UserWallet.js';
 import { consumeUserSubscriptionRide, resolveApplicableUserSubscription } from '../user/services/subscriptionService.js';
 import { applyPromoToRideInTransaction } from './promoService.js';
+import { computeSafeRideFare } from './safeRideService.js';
 import { getTipSettings } from './appSettingsService.js';
 import { getBidRideSettings, getTransportRideSettings } from './transportSettingsService.js';
 
@@ -940,6 +941,7 @@ export const createRideRecord = async ({
   bookingMode,
   userMaxBidFare,
   bidStepAmount,
+  safeRide = false,
 }) => {
   const user = await User.findById(userId);
 
@@ -1037,6 +1039,23 @@ export const createRideRecord = async ({
     return Math.max(0, Math.round(total));
   })();
 
+  // ── Safe Ride ("drunk mode"): dedicated per-vehicle tariff, if the rider asked for it and
+  // the admin enabled it on this vehicle. Recomputed here (never trusted from the client) so
+  // the estimate and the charge always agree.
+  const safeRideRequested = Boolean(safeRide);
+  const safeRideResult = safeRideRequested
+    ? computeSafeRideFare({
+      pricingRule,
+      distanceMeters: safeEstimatedDistanceMeters,
+      durationMinutes: safeEstimatedDurationMinutes,
+      standardFare: safeFare,
+    })
+    : null;
+  if (safeRideRequested && !safeRideResult?.applied) {
+    throw new ApiError(400, 'Safe Ride is not available for the selected vehicle');
+  }
+  const effectiveFare = safeRideResult?.applied ? safeRideResult.fare : safeFare;
+
   const normalizedPaymentMethod = normalizeRidePaymentMethod(paymentMethod);
   const resolvedRequestedPaymentMethod = allowedPaymentMethods.includes(normalizedPaymentMethod)
     ? normalizedPaymentMethod
@@ -1064,7 +1083,7 @@ export const createRideRecord = async ({
     : normalizeBidStepAmount(bidStepAmount);
   const effectiveBidStepAmount = configuredBidStepAmount || normalizeBidStepAmount(bidStepAmount);
   const bidRideRange = resolveBidRideRange({
-    baseFare: safeFare,
+    baseFare: effectiveFare,
     bidStepAmount: effectiveBidStepAmount,
     settings: bidRideSettings,
   });
@@ -1073,34 +1092,34 @@ export const createRideRecord = async ({
       amount: userMaxBidFare,
       minFare: bidRideRange.userBidFloorFare,
       maxFare: Math.min(bidRideRange.userBidCeilingFare, bidRideRange.driverBidCeilingFare),
-      baseFare: safeFare,
+      baseFare: effectiveFare,
       bidStepAmount: effectiveBidStepAmount,
     })
     : pricingNegotiationMode === 'user_increment_only'
       ? clampBidAmountWithinRange({
-        amount: safeFare,
+        amount: effectiveFare,
         minFare: bidRideRange.userBidFloorFare,
         maxFare: bidRideRange.userBidCeilingFare,
-        baseFare: safeFare,
+        baseFare: effectiveFare,
         bidStepAmount: effectiveBidStepAmount,
       })
-      : safeFare;
+      : effectiveFare;
   const effectiveBidFloorFare = pricingNegotiationMode === 'driver_bid'
     ? bidRideRange.driverBidFloorFare
     : pricingNegotiationMode === 'user_increment_only'
       ? bidRideRange.userBidFloorFare
-      : safeFare;
+      : effectiveFare;
   const effectiveBidCeilingMaxFare = pricingNegotiationMode === 'driver_bid'
     ? Math.min(bidRideRange.userBidCeilingFare, bidRideRange.driverBidCeilingFare)
     : pricingNegotiationMode === 'user_increment_only'
       ? bidRideRange.userBidCeilingFare
-      : safeFare;
+      : effectiveFare;
   const rideSurgeAmount = Boolean(surgeZone?.ride_surge_enabled)
     ? Math.max(0, Number(pricingRule?.ride_surge_amount || 0))
     : 0;
   const effectiveStartingFareWithoutSurge = pricingNegotiationMode === 'user_increment_only'
     ? effectiveUserMaxBidFare
-    : safeFare;
+    : effectiveFare;
   const effectiveStartingFare = effectiveStartingFareWithoutSurge + rideSurgeAmount;
   const effectiveBidFloorFareWithSurge = effectiveBidFloorFare + rideSurgeAmount;
   const effectiveUserMaxBidFareWithSurge = effectiveUserMaxBidFare + rideSurgeAmount;
@@ -1227,6 +1246,12 @@ export const createRideRecord = async ({
       driverPaymentCollection: effectiveDriverPaymentCollection,
       subscriptionUsage: effectiveSubscriptionUsage,
       otp: generateRideOtp(),
+      safeRide: {
+        isSafeRide: Boolean(safeRideResult?.applied),
+        acknowledgedAt: safeRideResult?.applied ? new Date() : null,
+        surchargeAmount: safeRideResult?.applied ? safeRideResult.surcharge : 0,
+        pricingSnapshot: safeRideResult?.applied ? safeRideResult.config : null,
+      },
       service_location_id: resolvedServiceLocationId,
       transport_type: normalizedTransportType,
       pricingSnapshot,
@@ -1283,6 +1308,12 @@ export const createRideRecord = async ({
             driverPaymentCollection: effectiveDriverPaymentCollection,
             subscriptionUsage: effectiveSubscriptionUsage,
             otp: generateRideOtp(),
+            safeRide: {
+              isSafeRide: Boolean(safeRideResult?.applied),
+              acknowledgedAt: safeRideResult?.applied ? new Date() : null,
+              surchargeAmount: safeRideResult?.applied ? safeRideResult.surcharge : 0,
+              pricingSnapshot: safeRideResult?.applied ? safeRideResult.config : null,
+            },
             service_location_id: resolvedServiceLocationId,
             transport_type: normalizedTransportType,
             pricingSnapshot,
@@ -1307,7 +1338,7 @@ export const createRideRecord = async ({
         ride: rideDoc,
         userId,
         code: promoCode,
-        fare: safeFare,
+        fare: effectiveFare,
         service_location_id,
         transport_type: transport_type || 'taxi',
         surgeAmount: rideSurgeAmount,

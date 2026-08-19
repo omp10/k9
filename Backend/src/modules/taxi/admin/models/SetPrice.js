@@ -230,6 +230,30 @@ const setPriceSchema = new mongoose.Schema(
       type: Number,
       default: null,
     },
+    /**
+     * Safe Ride (a.k.a. "drunk mode"): a passenger who has been drinking books a car with a
+     * dedicated, usually higher, tariff. This block is scoped exactly like the rest of this
+     * document — per service_location + transport_type + vehicle_type — so admins toggle it
+     * on only the vehicles they want and price each one independently.
+     *
+     * When `enabled` is false the option is hidden from the rider app entirely.
+     * Any pricing field left at 0 falls back to the vehicle's standard tariff above, so an
+     * admin can charge only a flat surcharge without restating the whole fare table.
+     */
+    safe_ride: {
+      enabled: { type: Boolean, default: false },
+      base_price: { type: Number, default: 0, min: 0 },
+      base_distance: { type: Number, default: 0, min: 0 },
+      price_per_distance: { type: Number, default: 0, min: 0 },
+      time_price: { type: Number, default: 0, min: 0 },
+      /** Flat amount added on top of the computed fare. */
+      flat_surcharge: { type: Number, default: 0, min: 0 },
+      /** Fare floor for a safe ride; the computed fare is raised to this if lower. */
+      min_fare: { type: Number, default: 0, min: 0 },
+      /** Shown in the rider app next to the option. */
+      note: { type: String, default: '', trim: true },
+    },
+
     cancellation_fee_goes_to: {
       type: String,
       default: 'admin',

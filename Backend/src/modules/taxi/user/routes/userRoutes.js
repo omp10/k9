@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../../../utils/asyncHandler.js';
+import { getSafeRideVehicles } from '../controllers/safeRideController.js';
 import { authenticateOrResolveUser } from '../../middlewares/authMiddleware.js';
 import {
   cancelMyBusBooking,
@@ -65,6 +66,8 @@ userRouter.get('/app-modules', asyncHandler(getAppModules));
 userRouter.get('/intercity-packages', asyncHandler(getIntercityPackageCatalog));
 userRouter.get('/goods-types', asyncHandler(getGoodsTypes));
 userRouter.get('/vehicle-types', asyncHandler(getPublicVehicleTypeCatalog));
+// Safe Ride ("drunk mode"): vehicles offering it here, with normal vs safe-ride fare.
+userRouter.get('/safe-ride/vehicles', asyncHandler(getSafeRideVehicles));
 // Public tariffs. Present pre-merge as userRouter.get('/set-prices'); the
 // rider app has always read fares from here and shows blank prices without it.
 userRouter.get('/set-prices', asyncHandler(getPublicSetPrices));

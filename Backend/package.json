@@ -23,13 +23,14 @@
     "migrate:unify-drivers": "node scripts/migrate-unify-drivers.js",
     "cleanup:legacy-collections": "node scripts/cleanup-legacy-collections.js",
     "verify-cancel": "node verify_cancellation.js",
-    "test": "npm run test:flow && npm run test:unify && npm run test:assignment && npm run test:workmode && npm run test:api",
+    "test": "npm run test:flow && npm run test:unify && npm run test:assignment && npm run test:workmode && npm run test:api && npm run test:saferide",
     "test:flow": "node tests/flow.smoke.mjs",
     "test:unify": "node tests/unify.smoke.mjs",
     "test:assignment": "node tests/assignment.smoke.mjs",
     "test:dispatch": "node tests/dispatch.smoke.mjs",
     "test:workmode": "node tests/workmode.smoke.mjs",
-    "test:api": "node tests/api.smoke.mjs"
+    "test:api": "node tests/api.smoke.mjs",
+    "test:saferide": "node tests/saferide.smoke.mjs"
   },
   "keywords": [],
   "author": "",

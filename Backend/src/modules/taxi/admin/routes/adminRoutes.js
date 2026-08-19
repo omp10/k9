@@ -219,8 +219,19 @@ import {
 } from '../controllers/poolingController.js';
 import { promotionsRouter } from '../promotions/routes/index.js';
 import { listSafetyAlerts, resolveSafetyAlert } from '../../safety/controllers/safetyController.js';
+import { asyncHandler } from '../../../../utils/asyncHandler.js';
+import {
+  listSafeRidePricing,
+  updateSafeRidePricing,
+  bulkToggleSafeRide,
+} from '../controllers/safeRideController.js';
 
 export const adminRouter = Router();
+
+// ----- Safe Ride ("drunk mode"): per-vehicle toggle + dedicated tariff -----
+adminRouter.get('/admin/safe-ride/pricing', authenticate(['admin']), asyncHandler(listSafeRidePricing));
+adminRouter.put('/admin/safe-ride/pricing/:setPriceId', authenticate(['admin']), asyncHandler(updateSafeRidePricing));
+adminRouter.patch('/admin/safe-ride/pricing/bulk-toggle', authenticate(['admin']), asyncHandler(bulkToggleSafeRide));
 
 adminRouter.get('/admin', getAdminStatus);
 adminRouter.get('/admin/status', getAdminStatus);
