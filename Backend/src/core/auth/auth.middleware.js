@@ -2,9 +2,10 @@ import { verifyAccessToken } from './token.util.js';
 import { sendError } from '../../utils/response.js';
 import { FoodUser } from '../users/user.model.js';
 import mongoose from 'mongoose';
+import { isAdminRole } from '../../utils/roles.js';
 
 export const requireAdmin = (req, res, next) => {
-    if (req.user?.role !== 'ADMIN') {
+    if (!isAdminRole(req.user?.role)) {
         return sendError(res, 403, 'Admin access required');
     }
     next();
