@@ -25,8 +25,11 @@ const roleModelMap = {
 };
 
 const normalizeRole = (role = '') => {
-  const value = String(role || '').toLowerCase();
-  if (value === 'super-admin') {
+  const value = String(role || '').trim().toLowerCase();
+  // Admin tokens are issued with several spellings depending on how the account was
+  // created (super-admin / super_admin / superadmin / platform_superadmin). They all mean
+  // "admin" here; only matching one spelling 403'd valid admins on every /taxi/admin route.
+  if (/^(super[-_ ]?admin|platform[-_ ]?superadmin|superadmin)$/.test(value)) {
     return 'admin';
   }
   return value;
