@@ -26,7 +26,9 @@ export const listSafeRidePricing = async (req, res) => {
   if (String(req.query.enabledOnly || '') === 'true') filter['safe_ride.enabled'] = true;
 
   const rules = await SetPrice.find(filter).lean();
-  const vehicleIds = [...new Set(rules.map((r) => String(r.vehicle_type)).filter(Boolean))];
+  // Filter BEFORE stringifying: String(undefined) is the truthy string 'undefined',
+  // which would reach the $in query and blow up as a bad ObjectId cast.
+  const vehicleIds = [...new Set(rules.map((r) => r.vehicle_type).filter(Boolean).map(String))];
   const vehicles = await Vehicle.find({ _id: { $in: vehicleIds } })
     .select('name icon icon_types active')
     .lean();

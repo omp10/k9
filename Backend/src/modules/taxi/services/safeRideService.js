@@ -96,7 +96,8 @@ export const listSafeRideVehicles = async ({
   const rules = await SetPrice.find(query).lean();
   if (!rules.length) return [];
 
-  const vehicleIds = [...new Set(rules.map((r) => String(r.vehicle_type)).filter(Boolean))];
+  // Filter BEFORE stringifying: String(undefined) is the truthy string 'undefined'.
+  const vehicleIds = [...new Set(rules.map((r) => r.vehicle_type).filter(Boolean).map(String))];
   const vehicles = await Vehicle.find({ _id: { $in: vehicleIds } })
     .select('name icon icon_types capacity status active')
     .lean();
