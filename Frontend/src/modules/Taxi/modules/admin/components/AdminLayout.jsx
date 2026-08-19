@@ -783,6 +783,7 @@ const AdminLayout = () => {
                 ],
               },*/
               { label: 'Set Price', path: '/taxi/admin/pricing/set-price', permission: 'set_prices.view' },
+              { label: 'Safe Ride Pricing', path: '/taxi/admin/pricing/safe-ride', permission: 'set_prices.view' },
               { label: 'Goods Types', path: '/taxi/admin/pricing/goods-types', permission: 'goods_types.view' },
             ],
           },
