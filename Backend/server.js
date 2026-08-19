@@ -258,19 +258,26 @@ const startServer = async () => {
             process.exit(1);
         });
 
-        // Handle unhandled promise rejections
+        // Handle unhandled promise rejections.
+        //
+        // Deliberately does NOT exit. An unhandled rejection is almost always one request's
+        // bug (a controller calling next() when it wasn't passed one, a stray .then, an
+        // un-awaited call) rather than corrupted process state. Exiting turned any such bug
+        // into a full outage: the process crash-looped under PM2, stopped listening, and
+        // nginx served 502s to every user of every module. Log it loudly and keep serving.
         process.on('unhandledRejection', (err) => {
             logger.error(`Unhandled Rejection: ${err?.message || err}`);
+            if (err?.stack) logger.error(err.stack);
+        });
+
+        // An uncaught exception CAN leave the process in an inconsistent state, so this one
+        // still exits — but only after logging the stack, and PM2 restarts it.
+        process.on('uncaughtException', (err) => {
+            logger.error(`Uncaught Exception: ${err?.message || err}`);
+            if (err?.stack) logger.error(err.stack);
             if (config.nodeEnv === 'production') {
                 if (server) server.close(() => process.exit(1));
                 else process.exit(1);
-            }
-        });
-
-        process.on('uncaughtException', (err) => {
-            logger.error(`Uncaught Exception: ${err?.message || err}`);
-            if (config.nodeEnv === 'production') {
-                process.exit(1);
             }
         });
 
