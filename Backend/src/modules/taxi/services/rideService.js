@@ -59,7 +59,10 @@ const clearUserActiveRideIfPresent = async (user) => {
   // Stop the old ride's dispatch flow (else retry timers keep firing) and tell the assigned/notified
   // drivers to drop it. Dynamic import avoids a circular dependency with dispatchService.
   try {
-    const { stopDispatchFlow, getDispatchState, emitToDriver, emitToRoom, getRideRoom } =
+    // getRideRoom is defined in THIS module — importing it from dispatchService yielded
+    // undefined and threw on every superseded-ride cleanup, so the old ride's dispatch
+    // was never actually stopped.
+    const { stopDispatchFlow, getDispatchState, emitToDriver, emitToRoom } =
       await import('./dispatchService.js');
     const state = getDispatchState(activeRide._id);
     stopDispatchFlow(activeRide._id);
