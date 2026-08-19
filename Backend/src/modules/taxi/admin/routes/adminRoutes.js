@@ -228,11 +228,6 @@ import {
 
 export const adminRouter = Router();
 
-// ----- Safe Ride ("drunk mode"): per-vehicle toggle + dedicated tariff -----
-adminRouter.get('/admin/safe-ride/pricing', authenticate(['admin']), asyncHandler(listSafeRidePricing));
-adminRouter.put('/admin/safe-ride/pricing/:setPriceId', authenticate(['admin']), asyncHandler(updateSafeRidePricing));
-adminRouter.patch('/admin/safe-ride/pricing/bulk-toggle', authenticate(['admin']), asyncHandler(bulkToggleSafeRide));
-
 adminRouter.get('/admin', getAdminStatus);
 adminRouter.get('/admin/status', getAdminStatus);
 adminRouter.post('/admin/forgot-password', forgotPassword);
@@ -245,6 +240,13 @@ adminRouter.get('/admin/service-locations/nearby', getNearbyServiceLocations);
 adminRouter.get('/admin/notification-channels', getNotificationChannels);
 adminRouter.get('/admin/zones', getZones);
 adminRouter.use('/admin', authenticate(['admin']));
+
+// ----- Safe Ride ("drunk mode"): per-vehicle toggle + dedicated tariff -----
+// Registered after the router-level auth above so it is protected the same way as every
+// other admin route (registering before it bypassed that guard).
+adminRouter.get('/admin/safe-ride/pricing', asyncHandler(listSafeRidePricing));
+adminRouter.put('/admin/safe-ride/pricing/:setPriceId', asyncHandler(updateSafeRidePricing));
+adminRouter.patch('/admin/safe-ride/pricing/bulk-toggle', asyncHandler(bulkToggleSafeRide));
 
 adminRouter.get('/admin/permissions', getAdminPermissions);
 adminRouter.get('/admin/admin-management/admins', getAdmins);
