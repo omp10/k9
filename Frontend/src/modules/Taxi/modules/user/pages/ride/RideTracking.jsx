@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Phone, MessageCircle, AlertTriangle, Shield, Star, ChevronLeft, Share2, Clock3, FileText, ChevronDown, X, Check } from 'lucide-react';
+import { Phone, MessageCircle, AlertTriangle, Shield, Star, ChevronLeft, Share2, Clock3, FileText, ChevronDown, X, Check, Layers, LocateFixed } from 'lucide-react';
 import { GoogleMap, MarkerF, OverlayView, OverlayViewF, PolylineF } from '@react-google-maps/api';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../../admin/utils/googleMaps';
 import { socketService } from '../../../../shared/api/socket';
@@ -325,6 +325,8 @@ const RideTracking = () => {
   const [routePath, setRoutePath] = useState([]);
   const [routeError, setRouteError] = useState('');
   const [map, setMap] = useState(null);
+  // Map view: roadmap <-> satellite (hybrid keeps road/place labels over imagery).
+  const [mapType, setMapType] = useState('roadmap');
   const [safetyToolkitOpen, setSafetyToolkitOpen] = useState(false);
   const [driverImageFallback, setDriverImageFallback] = useState('');
   const [driverImageBroken, setDriverImageBroken] = useState(false);
@@ -1406,6 +1408,7 @@ const RideTracking = () => {
               fullscreenControl: false,
               mapTypeControl: false,
               gestureHandling: 'greedy',
+              mapTypeId: mapType,
             }}
           >
             {routePath.length > 1 && hasLiveDriverLocation && (
@@ -1456,6 +1459,39 @@ const RideTracking = () => {
             <div className="rounded-[16px] bg-white/90 px-4 py-3 shadow-sm text-[12px] font-bold text-slate-700">
               Loading map
             </div>
+          </div>
+        )}
+
+        {/* Map controls: satellite/layers toggle + recenter on the driver. */}
+        {isLoaded && HAS_VALID_GOOGLE_MAPS_KEY && !loadError && (
+          <div className="pointer-events-none absolute right-3 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-3">
+            <button
+              type="button"
+              aria-label={mapType === 'roadmap' ? 'Switch to satellite view' : 'Switch to map view'}
+              title={mapType === 'roadmap' ? 'Satellite view' : 'Map view'}
+              onClick={() => setMapType((t) => (t === 'roadmap' ? 'hybrid' : 'roadmap'))}
+              className={`pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full border shadow-lg transition active:scale-95 ${
+                mapType === 'roadmap'
+                  ? 'border-slate-200 bg-white text-slate-900'
+                  : 'border-slate-900 bg-slate-900 text-white'
+              }`}
+            >
+              <Layers size={18} strokeWidth={2.5} />
+            </button>
+            <button
+              type="button"
+              aria-label="Recenter map"
+              title="Recenter"
+              onClick={() => {
+                if (map && driverPosition) {
+                  map.panTo(driverPosition);
+                  map.setZoom(16);
+                }
+              }}
+              className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-900 shadow-lg transition active:scale-95"
+            >
+              <LocateFixed size={18} strokeWidth={2.5} />
+            </button>
           </div>
         )}
       </div>

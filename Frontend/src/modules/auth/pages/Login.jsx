@@ -236,14 +236,24 @@ export default function UnifiedOTPFastLogin({ viewType = "auth" }) {
           } catch (_) {}
         }
         if (!fcmToken) {
-          throw new Error("Unable to fetch mobile FCM token from app bridge")
+          // Push registration must never block sign-in. The backend treats fcmToken as
+          // optional; the user simply gets no push until a later login refreshes it.
+          console.warn("[Auth] No mobile FCM token from app bridge - continuing without push")
         }
       } else {
-        fcmToken = await withTimeout(
-          getWebFcmTokenForLogin(),
-          FCM_FETCH_TIMEOUT_MS,
-          "FCM token fetch",
-        )
+        try {
+          fcmToken = await withTimeout(
+            getWebFcmTokenForLogin(),
+            FCM_FETCH_TIMEOUT_MS,
+            "FCM token fetch",
+          )
+        } catch (fcmError) {
+          // Missing VITE_FIREBASE_* config, denied notification permission, an
+          // unsupported browser or a non-HTTPS origin all land here. None of them are
+          // a reason to refuse login.
+          console.warn("[Auth] FCM token unavailable, continuing without push:", fcmError?.message)
+          fcmToken = ""
+        }
       }
 
       console.log("[Auth] FCM token for login:", {
