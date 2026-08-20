@@ -834,6 +834,7 @@ const AdminLayout = () => {
             ],
           },
           { icon: Wallet, label: 'Wallet Payment', path: '/taxi/admin/wallet/payment', permission: 'wallet.view' },
+          { icon: Layers, label: 'Driver Work Mode', path: '/taxi/admin/drivers/work-mode', permission: 'drivers.view' },
           {
             icon: Car,
             label: 'Driver Management',
@@ -854,7 +855,6 @@ const AdminLayout = () => {
               { label: 'Driver Needed Documents', path: '/taxi/admin/drivers/documents', permission: 'drivers.view' },
               { label: 'Driver Bulk Upload', path: '/taxi/admin/drivers/bulk-upload', permission: 'drivers.view' },
               { label: 'Payment Methods', path: '/taxi/admin/drivers/payment-methods', permission: 'wallet.view' },
-              { label: 'Driver Work Mode', path: '/taxi/admin/drivers/work-mode', permission: 'drivers.view' },
             ],
           },
           {
