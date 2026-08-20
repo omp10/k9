@@ -43,7 +43,7 @@ export default function SafeRidePricing() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get('/taxi/admin/safe-ride/pricing');
+      const res = await api.get('/admin/safe-ride/pricing');
       const data = res?.data?.data ?? res?.data ?? [];
       const list = Array.isArray(data) ? data : [];
       setRows(list);
@@ -66,7 +66,7 @@ export default function SafeRidePricing() {
     const draft = drafts[row.setPriceId];
     setSavingId(row.setPriceId);
     try {
-      const res = await api.put(`/taxi/admin/safe-ride/pricing/${row.setPriceId}`, draft);
+      const res = await api.put(`/admin/safe-ride/pricing/${row.setPriceId}`, draft);
       const applied = res?.data?.data?.safeRide;
       if (applied) setField(row.setPriceId, 'enabled', applied.enabled);
       setRows((rs) => rs.map((r) =>
