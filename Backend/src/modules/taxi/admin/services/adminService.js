@@ -2280,6 +2280,10 @@ const serializeDriver = (driver) => ({
   deletionRequest: driver.deletionRequest || { status: 'none' },
   documents: driver.documents || {},
   onboarding: driver.onboarding || {},
+  workMode: driver.workMode || 'all',
+  serviceCapabilities: Array.isArray(driver.serviceCapabilities) && driver.serviceCapabilities.length
+    ? driver.serviceCapabilities
+    : ['taxi'],
   createdAt: driver.createdAt,
   updatedAt: driver.updatedAt,
 });
@@ -2302,6 +2306,8 @@ const DRIVER_LIST_SELECT = [
   'onlineSelfie',
   'approve',
   'status',
+  'workMode',
+  'serviceCapabilities',
   'createdAt',
   'updatedAt',
 ].join(' ');
@@ -2338,6 +2344,10 @@ const serializeDriverListItem = (driver) => ({
   approve: Boolean(driver.approve),
   status: driver.status || (driver.approve ? 'approved' : 'pending'),
   active: driver.approve !== false && String(driver.status || '').toLowerCase() !== 'inactive',
+  workMode: driver.workMode || 'all',
+  serviceCapabilities: Array.isArray(driver.serviceCapabilities) && driver.serviceCapabilities.length
+    ? driver.serviceCapabilities
+    : ['taxi'],
   createdAt: driver.createdAt,
   updatedAt: driver.updatedAt,
 });
@@ -4820,6 +4830,40 @@ export const updateDriver = async (id, payload, currentAdmin = null) => {
 
   if (payload.onboarding !== undefined) {
     update.onboarding = payload.onboarding;
+  }
+
+  // Driver unification: which job streams this driver is set up for (serviceCapabilities)
+  // and which they currently accept (workMode). Both feed the dispatch filters, so they
+  // are validated together — a mode the driver has no capability for would silently
+  // remove them from dispatch.
+  const capsValue = payload.serviceCapabilities ?? payload.service_capabilities;
+  const modeValue = payload.workMode ?? payload.work_mode;
+  if (capsValue !== undefined || modeValue !== undefined) {
+    let caps;
+    if (capsValue !== undefined) {
+      caps = [...new Set((Array.isArray(capsValue) ? capsValue : [capsValue]).map((c) => String(c || '').trim().toLowerCase()))];
+      if (!caps.length || caps.some((c) => !['taxi', 'delivery'].includes(c))) {
+        throw new ApiError(400, 'serviceCapabilities must be a non-empty list of: taxi, delivery');
+      }
+      update.serviceCapabilities = caps;
+    } else {
+      const existing = await Driver.findById(id).select('serviceCapabilities').lean();
+      if (!existing) throw new ApiError(404, 'Driver not found');
+      caps = Array.isArray(existing.serviceCapabilities) && existing.serviceCapabilities.length
+        ? existing.serviceCapabilities
+        : ['taxi'];
+    }
+
+    if (modeValue !== undefined) {
+      const mode = String(modeValue || '').trim().toLowerCase();
+      if (!['all', 'taxi', 'delivery'].includes(mode)) {
+        throw new ApiError(400, 'workMode must be one of: all, taxi, delivery');
+      }
+      if (mode === 'all' ? caps.length < 2 : !caps.includes(mode)) {
+        throw new ApiError(400, `Driver has no ${mode === 'all' ? 'taxi + delivery' : mode} capability for work mode '${mode}'`);
+      }
+      update.workMode = mode;
+    }
   }
 
   const driver = await Driver.findByIdAndUpdate(id, update, { returnDocument: 'after' });

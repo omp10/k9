@@ -213,6 +213,7 @@ const AdminDriverAudit = lazy(() => import('./modules/admin/pages/drivers/Driver
 const AdminPaymentMethods = lazy(() => import('./modules/admin/pages/drivers/PaymentMethods'));
 const AdminDriverCreate = lazy(() => import('./modules/admin/pages/drivers/CreateDriver'));
 const AdminDriverEdit = lazy(() => import('./modules/admin/pages/drivers/EditDriver'));
+const AdminDriverWorkMode = lazy(() => import('./modules/admin/pages/drivers/DriverWorkMode'));
 const AdminReferralDashboard = lazy(() => import('./modules/admin/pages/referrals/ReferralDashboard'));
 const AdminUserReferralSettings = lazy(() => import('./modules/admin/pages/referrals/UserReferralSettings'));
 const AdminDriverReferralSettings = lazy(() => import('./modules/admin/pages/referrals/DriverReferralSettings'));
@@ -1238,6 +1239,10 @@ function TaxiApp() {
               <Route
                 path="drivers/payment-methods"
                 element={<AdminPaymentMethods />}
+              />
+              <Route
+                path="drivers/work-mode"
+                element={<AdminDriverWorkMode />}
               />
               <Route
                 path="drivers/audit/:id"

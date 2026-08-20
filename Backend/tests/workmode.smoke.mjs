@@ -99,6 +99,45 @@ async function main() {
     assert.ok((await delIds()).includes(String(d._id)), 'and eligible for deliveries again');
   });
 
+  // The admin panel's Driver Work Mode screen writes both fields through adminService.updateDriver.
+  const { updateDriver } = await import('../src/modules/taxi/admin/services/adminService.js');
+
+  await test('admin can switch a driver to delivery-only', async () => {
+    const d = await mk({ serviceCapabilities: ['taxi'], workMode: 'taxi' });
+    await updateDriver(d._id, { workMode: 'delivery', serviceCapabilities: ['delivery'] });
+    assert.ok((await delIds()).includes(String(d._id)), 'now offered deliveries');
+    assert.ok(!(await taxiIds()).includes(String(d._id)), 'no longer offered rides');
+  });
+
+  await test('admin can grant both capabilities and mode all', async () => {
+    const d = await mk({ serviceCapabilities: ['taxi'], workMode: 'taxi' });
+    await updateDriver(d._id, { workMode: 'all', serviceCapabilities: ['taxi', 'delivery'] });
+    assert.ok((await taxiIds()).includes(String(d._id)));
+    assert.ok((await delIds()).includes(String(d._id)));
+  });
+
+  await test('admin cannot set a mode the driver has no capability for', async () => {
+    const d = await mk({ serviceCapabilities: ['taxi'], workMode: 'taxi' });
+    await assert.rejects(() => updateDriver(d._id, { workMode: 'delivery' }));
+    const after = await Driver.findById(d._id).lean();
+    assert.equal(after.workMode, 'taxi', 'left untouched');
+  });
+
+  await test('admin cannot set an unknown mode or capability', async () => {
+    const d = await mk();
+    await assert.rejects(() => updateDriver(d._id, { workMode: 'rocket' }));
+    await assert.rejects(() => updateDriver(d._id, { serviceCapabilities: [] }));
+    await assert.rejects(() => updateDriver(d._id, { serviceCapabilities: ['bus'] }));
+  });
+
+  await test('other driver edits still work without touching work mode', async () => {
+    const d = await mk({ serviceCapabilities: ['taxi'], workMode: 'taxi' });
+    await updateDriver(d._id, { name: 'Renamed' });
+    const after = await Driver.findById(d._id).lean();
+    assert.equal(after.name, 'Renamed');
+    assert.equal(after.workMode, 'taxi');
+  });
+
   const failed = results.filter(r => !r.ok).length;
   console.log(`\n${results.length - failed}/${results.length} passed`);
   await mongoose.disconnect().catch(() => {});
